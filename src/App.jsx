@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Folder, FolderOpen, Image as ImageIcon, Settings, Plus, UploadCloud, 
   Copy, ExternalLink, Trash2, CheckCircle2, AlertCircle, Loader2, 
-  ChevronRight, ArrowLeft, FileText, Search, ShieldCheck, Lock, LogOut, Wifi, Server,
+  ChevronRight, ArrowLeft, FileText, Search, ShieldCheck, Lock, LogOut,
   Menu, X
 } from 'lucide-react';
+
+const WORKER_URL = 'https://lingering-glade-f145.farazjawed5656.workers.dev';
 
 // --- UTILITY FUNCTIONS ---
 const sanitizeFilename = (name) => {
@@ -43,7 +45,6 @@ const getUniqueFilename = (filename, existingFiles, subfolderPath) => {
 };
 
 export default function MediaManagerApp() {
-  const [workerUrl, setWorkerUrl] = useState(localStorage.getItem('mm_workerUrl') || '');
   const [authStatus, setAuthStatus] = useState('loading'); 
   const [publicConfig, setPublicConfig] = useState(null);
   
@@ -61,9 +62,7 @@ export default function MediaManagerApp() {
   }, []);
 
   const api = useCallback(async (endpoint, options = {}) => {
-    if (!workerUrl) throw new Error("Worker URL is missing.");
-    
-    const url = `${workerUrl.replace(/\/$/, '')}${endpoint}`;
+    const url = `${WORKER_URL.replace(/\/$/, '')}${endpoint}`;
     const headers = { ...options.headers };
     
     if (options.method && ['POST', 'PUT', 'DELETE'].includes(options.method.toUpperCase())) {
@@ -98,7 +97,7 @@ export default function MediaManagerApp() {
     }
 
     return isJson ? res.json() : res.text();
-  }, [workerUrl, handleSessionExpired]);
+  }, [handleSessionExpired]);
 
   const loadPublicConfig = useCallback(async () => {
     try {
@@ -117,11 +116,6 @@ export default function MediaManagerApp() {
     let isMounted = true;
 
     const checkAuth = async () => {
-      if (!workerUrl) {
-        setAuthStatus('setup');
-        return;
-      }
-
       try {
         setAuthStatus('loading');
         const res = await api('/api/auth/me');
@@ -140,7 +134,7 @@ export default function MediaManagerApp() {
 
     checkAuth();
     return () => { isMounted = false; };
-  }, [workerUrl, api, loadPublicConfig]);
+  }, [api, loadPublicConfig]);
 
   // Fetch Projects when authenticated
   const fetchProjects = useCallback(async () => {
@@ -162,12 +156,6 @@ export default function MediaManagerApp() {
       fetchProjects();
     }
   }, [authStatus, currentView, activeProject, fetchProjects]);
-
-  const handleSaveWorkerUrl = (url) => {
-    const cleanUrl = url.replace(/\/$/, '');
-    localStorage.setItem('mm_workerUrl', cleanUrl);
-    setWorkerUrl(cleanUrl);
-  };
 
   const handleLogout = async () => {
     try {
@@ -193,10 +181,6 @@ export default function MediaManagerApp() {
     );
   }
 
-  if (authStatus === 'setup') {
-    return <SetupView onSave={handleSaveWorkerUrl} />;
-  }
-
   if (authStatus === 'login') {
     return (
       <LoginView
@@ -205,7 +189,6 @@ export default function MediaManagerApp() {
           await loadPublicConfig();
           setAuthStatus('authenticated');
         }}
-        onBackToSetup={() => setAuthStatus('setup')}
       />
     );
   }
@@ -297,9 +280,7 @@ export default function MediaManagerApp() {
         {/* VIEWS */}
         {currentView === 'settings' && (
           <SettingsView 
-            workerUrl={workerUrl} 
             api={api} 
-            onSaveUrl={handleSaveWorkerUrl} 
             onLogout={handleLogout} 
           />
         )}
@@ -328,51 +309,7 @@ export default function MediaManagerApp() {
   );
 }
 
-function SetupView({ onSave }) {
-  const [url, setUrl] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (url.trim()) onSave(url.trim());
-  };
-
-  return (
-    <div className="flex h-screen items-center justify-center bg-slate-50 sm:bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-100 via-slate-50 to-slate-50 p-4 font-sans antialiased">
-      <div className="bg-white/95 backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_8px_40px_rgb(0,0,0,0.04)] border border-slate-200/60 w-full max-w-md relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-400 opacity-20"></div>
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-[0_2px_10px_rgba(37,99,235,0.1)]">
-            <Server className="w-8 h-8" />
-          </div>
-        </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-center text-slate-900 mb-2">Connect to Worker</h1>
-        <p className="text-center text-slate-500 mb-8 text-[14px]">Enter the URL of your secure Cloudflare Worker to begin.</p>
-        
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-[13px] font-medium text-slate-600 mb-1.5">Cloudflare Worker URL</label>
-            <input 
-              type="url" 
-              required
-              placeholder="https://your-worker.workers.dev"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full px-4 py-3.5 bg-slate-50/50 shadow-inner border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-            />
-          </div>
-          <button 
-            type="submit"
-            className="w-full bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white font-medium py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200"
-          >
-            Connect Configuration
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function LoginView({ api, onSuccess, onBackToSetup }) {
+function LoginView({ api, onSuccess }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -436,85 +373,20 @@ function LoginView({ api, onSuccess, onBackToSetup }) {
             {loading ? 'Authenticating...' : 'Sign In →'}
           </button>
         </form>
-        
-        <div className="mt-8 text-center">
-          <button onClick={onBackToSetup} className="text-[13px] font-medium text-slate-400 hover:text-slate-600 transition-colors">
-            Change Worker Configuration
-          </button>
-        </div>
       </div>
     </div>
   );
 }
 
-function SettingsView({ workerUrl, api, onSaveUrl, onLogout }) {
-  const [localUrl, setLocalUrl] = useState(workerUrl);
-  const [testStatus, setTestStatus] = useState(null); 
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    onSaveUrl(localUrl);
-    setTestStatus(null);
-  };
-
-  const handleTestConnection = async () => {
-    setTestStatus('testing');
-    try {
-      const res = await api('/api/health');
-      if (res.status === 'ok') setTestStatus('success');
-      else setTestStatus('error');
-    } catch (e) {
-      setTestStatus('error');
-    }
-  };
-
+function SettingsView({ api, onLogout }) {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto w-full overflow-y-auto min-w-0">
       <div className="mb-6 md:mb-10">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 mb-1.5">Settings</h1>
-        <p className="text-slate-500 text-[14px]">Manage your connection and secure session.</p>
+        <p className="text-slate-500 text-[14px]">Manage your secure session.</p>
       </div>
 
       <div className="space-y-6">
-        <form onSubmit={handleSave} className="bg-white p-5 md:p-8 rounded-3xl border border-slate-200/60 shadow-[0_4px_24px_rgba(0,0,0,0.02)] space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-800">Worker Connection</h2>
-            <div className="shrink-0">
-              {testStatus === 'testing' && <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />}
-              {testStatus === 'success' && <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-[13px] font-medium border border-emerald-100"><Wifi className="w-3.5 h-3.5"/> <span className="hidden sm:inline">Connected</span></div>}
-              {testStatus === 'error' && <div className="flex items-center gap-1.5 text-red-500 bg-red-50 px-2 py-1 rounded-md text-[13px] font-medium border border-red-100"><AlertCircle className="w-3.5 h-3.5"/> <span className="hidden sm:inline">Failed</span></div>}
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-[13px] font-medium text-slate-600 mb-1.5">Cloudflare Worker URL</label>
-            <input 
-              type="url" 
-              required
-              value={localUrl}
-              onChange={(e) => setLocalUrl(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50/50 shadow-inner border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-            />
-          </div>
-
-          <div className="pt-2 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-4">
-            <button 
-              type="button"
-              onClick={handleTestConnection}
-              className="text-[13px] font-semibold tracking-wide text-blue-600 hover:text-blue-700 w-full sm:w-auto text-center sm:text-left transition-colors"
-            >
-              TEST CONNECTION
-            </button>
-            <button 
-              type="submit"
-              disabled={localUrl === workerUrl}
-              className="w-full sm:w-auto bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 disabled:opacity-50 disabled:hover:-translate-y-0 text-white px-6 py-2.5 rounded-xl font-medium shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all"
-            >
-              Save URL
-            </button>
-          </div>
-        </form>
-
         <div className="bg-white p-5 md:p-8 rounded-3xl border border-slate-200/60 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
           <h2 className="text-base font-semibold text-slate-800 mb-5">Account Security</h2>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-slate-50/80 rounded-2xl border border-slate-100 gap-4 shadow-sm">
