@@ -5,7 +5,6 @@ import {
   ChevronRight, ArrowLeft, FileText, Search, ShieldCheck, Lock, LogOut,
   Menu, X
 } from 'lucide-react';
-import Lenis from '@studio-freight/lenis';
 
 const WORKER_URL = 'https://lingering-glade-f145.farazjawed5656.workers.dev';
 
@@ -53,36 +52,11 @@ const getPublicUrl = (path, publicConfig) => {
 };
 
 // --- CUSTOM HOOKS ---
-// Lenis Smooth Scroll per-container wrapper
+// Standard React Ref for scrolling (Lenis removed to fix build error)
 const useSmoothScroll = () => {
   const scrollRef = useRef(null);
-  
-  useEffect(() => {
-    if (!scrollRef.current) return;
-    
-    let lenis;
-    try {
-      lenis = new Lenis({
-        wrapper: scrollRef.current,
-        content: scrollRef.current.firstElementChild, // Wrapper must have a single direct child
-        lerp: 0.08, // Smoothness intensity
-        smoothWheel: true,
-      });
-
-      const raf = (time) => {
-        lenis.raf(time);
-        requestAnimationFrame(raf);
-      };
-      requestAnimationFrame(raf);
-    } catch (e) {
-      console.warn("Lenis initialization failed. Is @studio-freight/lenis installed?", e);
-    }
-
-    return () => {
-      if (lenis) lenis.destroy();
-    };
-  }, []);
-
+  // We retain the hook structure so the component refs still attach correctly,
+  // relying on native browser hardware-accelerated scrolling.
   return scrollRef;
 };
 
