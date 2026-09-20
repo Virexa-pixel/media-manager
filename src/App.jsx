@@ -5,6 +5,7 @@ import {
   ChevronRight, ArrowLeft, FileText, Search, ShieldCheck, Lock, LogOut,
   Menu, X
 } from 'lucide-react';
+import Lenis from '@studio-freight/lenis';
 
 const WORKER_URL = 'https://lingering-glade-f145.farazjawed5656.workers.dev';
 
@@ -43,6 +44,124 @@ const getUniqueFilename = (filename, existingFiles, subfolderPath) => {
   }
   return newName;
 };
+
+const getPublicUrl = (path, publicConfig) => {
+  if (publicConfig?.publicAssetBaseUrl) {
+    return `${publicConfig.publicAssetBaseUrl.replace(/\/$/, '')}/${path}`;
+  }
+  return `[Public_URL_Unavailable_Add_Config_To_Worker]/${path}`;
+};
+
+// --- CUSTOM HOOKS ---
+// Lenis Smooth Scroll per-container wrapper
+const useSmoothScroll = () => {
+  const scrollRef = useRef(null);
+  
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    
+    let lenis;
+    try {
+      lenis = new Lenis({
+        wrapper: scrollRef.current,
+        content: scrollRef.current.firstElementChild, // Wrapper must have a single direct child
+        lerp: 0.08, // Smoothness intensity
+        smoothWheel: true,
+      });
+
+      const raf = (time) => {
+        lenis.raf(time);
+        requestAnimationFrame(raf);
+      };
+      requestAnimationFrame(raf);
+    } catch (e) {
+      console.warn("Lenis initialization failed. Is @studio-freight/lenis installed?", e);
+    }
+
+    return () => {
+      if (lenis) lenis.destroy();
+    };
+  }, []);
+
+  return scrollRef;
+};
+
+// --- OPTIMIZED MEMOIZED COMPONENTS ---
+// This completely eliminates React re-render lag when searching or clicking assets
+const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }) => {
+  const url = getPublicUrl(file.path, publicConfig);
+  const isImage = /\.(jpe?g|png|webp|gif|svg|avif)$/i.test(file.name);
+  const isSvg = /\.svg$/i.test(file.name);
+  
+  // WebP Proxy optimization for massive uncompressed images
+  const thumbnailUrl = (isImage && !isSvg && publicConfig?.publicAssetBaseUrl) 
+    ? `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&q=70&output=webp` 
+    : url;
+
+  return (
+    <div 
+      onClick={() => onSelect(file)}
+      // content-visibility:auto skips painting off-screen cards (Massive GPU optimization)
+      // transform-gpu pushes hover animations to hardware acceleration
+      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-[0_2px_10px_-3px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_30px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1 hover:border-slate-300/80 transition-all duration-500 ease-out flex flex-col min-w-0 transform-gpu will-change-transform [content-visibility:auto] [contain-intrinsic-size:auto_280px]"
+    >
+      <div className="h-36 bg-slate-50/80 flex items-center justify-center relative overflow-hidden border-b border-slate-100/80">
+        {isImage && publicConfig?.publicAssetBaseUrl ? (
+          <img
+            src={thumbnailUrl}
+            alt={file.name}
+            className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.04] transition-transform duration-500 ease-out transform-gpu will-change-transform"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <FileText className="w-10 h-10 text-slate-300 transition-transform duration-500 ease-out group-hover:scale-110" />
+        )}
+        
+        {/* Hover Actions */}
+        <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out flex items-center justify-center gap-3">
+          <button 
+            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(url); }}
+            className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-300 transform-gpu"
+            title="Copy Public URL"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          {publicConfig && (
+            <a 
+              href={url} 
+              onClick={(e) => e.stopPropagation()}
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-300 transform-gpu"
+              title="Open in new tab"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+        </div>
+      </div>
+      
+      <div className="p-3.5 flex flex-col flex-1 min-w-0">
+        <div className="text-[12px] font-mono font-semibold text-slate-800 truncate mb-1.5" title={file.name}>
+          {file.name}
+        </div>
+        <div className="flex items-center justify-between mt-auto pt-2">
+          <span className="text-[10px] font-medium text-slate-500 bg-slate-100/80 border border-slate-200/50 px-2 py-0.5 rounded-md truncate max-w-[60%]">
+            {formatBytes(file.size)}
+          </span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(file); }}
+            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-300 p-1.5 -mr-1.5 rounded-lg active:scale-95 transform-gpu"
+            title="Delete file"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default function MediaManagerApp() {
   const [authStatus, setAuthStatus] = useState('loading'); 
@@ -367,7 +486,7 @@ function LoginView({ api, onSuccess }) {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 disabled:opacity-70 disabled:hover:-translate-y-0 text-white font-medium py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 disabled:opacity-70 disabled:hover:-translate-y-0 text-white font-medium py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 transform-gpu"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
             {loading ? 'Authenticating...' : 'Sign In →'}
@@ -399,7 +518,7 @@ function SettingsView({ api, onLogout }) {
             </div>
             <button 
               onClick={onLogout}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-red-200 hover:bg-red-50 hover:text-red-600 px-5 py-2.5 rounded-xl text-slate-700 font-medium transition-all active:scale-[0.98] shrink-0"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-red-200 hover:bg-red-50 hover:text-red-600 px-5 py-2.5 rounded-xl text-slate-700 font-medium transition-all active:scale-[0.98] shrink-0 transform-gpu"
             >
               <LogOut className="w-4 h-4" />
               LOG OUT
@@ -417,6 +536,7 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
   const [newProjectSlug, setNewProjectSlug] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
+  const scrollRef = useSmoothScroll(); // Apply Lenis Smooth Scroll
 
   useEffect(() => {
     setNewProjectSlug(sanitizeFilename(newProjectName));
@@ -443,58 +563,60 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-10 max-w-6xl mx-auto gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 truncate">Projects</h1>
-          <p className="text-slate-500 text-[14px] mt-1 truncate">Organize your media repositories</p>
+    <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0" ref={scrollRef}>
+      <div className="w-full min-h-full"> {/* Lenis Wrapper content element */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-10 max-w-6xl mx-auto gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 truncate">Projects</h1>
+            <p className="text-slate-500 text-[14px] mt-1 truncate">Organize your media repositories</p>
+          </div>
+          <button 
+            onClick={() => setShowNew(true)}
+            className="w-full sm:w-auto bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white px-5 py-2.5 rounded-xl font-medium shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2 transition-all duration-300 shrink-0 transform-gpu"
+          >
+            <Plus className="w-4 h-4" />
+            New Project
+          </button>
         </div>
-        <button 
-          onClick={() => setShowNew(true)}
-          className="w-full sm:w-auto bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white px-5 py-2.5 rounded-xl font-medium shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2 transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          New Project
-        </button>
-      </div>
 
-      <div className="max-w-6xl mx-auto min-w-0">
-        {error && (
-          <div className="bg-red-50/80 border border-red-100 text-red-700 p-4 rounded-xl mb-6 flex items-start gap-3 shadow-sm">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <span className="min-w-0 break-words text-sm font-medium">{error}</span>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center p-16 text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin drop-shadow-sm" />
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="bg-white/50 border border-dashed border-slate-300 rounded-[2rem] p-12 md:p-16 text-center text-slate-500">
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl mx-auto flex items-center justify-center mb-5 shadow-inner">
-              <Folder className="w-8 h-8 text-slate-400 shrink-0" />
+        <div className="max-w-6xl mx-auto min-w-0">
+          {error && (
+            <div className="bg-red-50/80 border border-red-100 text-red-700 p-4 rounded-xl mb-6 flex items-start gap-3 shadow-sm">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <span className="min-w-0 break-words text-sm font-medium">{error}</span>
             </div>
-            <p className="text-lg font-medium text-slate-700 mb-1.5 tracking-tight">No projects yet</p>
-            <p className="text-[14px]">Create your first project to start uploading media.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-            {projects.map((proj) => (
-              <div 
-                key={proj.slug}
-                onClick={() => onOpenProject(proj)}
-                className="bg-white border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl p-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-slate-300/80 hover:-translate-y-1 cursor-pointer transition-all duration-300 ease-out group min-w-0"
-              >
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-50/80 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:shadow-[0_4px_12px_rgba(37,99,235,0.12)] transition-all duration-300 shrink-0">
-                  <Folder className="w-6 h-6 fill-current opacity-80" />
-                </div>
-                <h3 className="font-semibold text-slate-900 tracking-tight truncate" title={proj.name}>{proj.name}</h3>
-                <p className="text-[11px] text-slate-500 mt-1.5 font-mono truncate bg-slate-50 px-2 py-0.5 rounded-md inline-block border border-slate-100" title={`/projects/${proj.slug}`}>/projects/{proj.slug}</p>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center p-16 text-slate-400">
+              <Loader2 className="w-8 h-8 animate-spin drop-shadow-sm" />
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="bg-white/50 border border-dashed border-slate-300 rounded-[2rem] p-12 md:p-16 text-center text-slate-500">
+              <div className="w-16 h-16 bg-slate-100 rounded-2xl mx-auto flex items-center justify-center mb-5 shadow-inner">
+                <Folder className="w-8 h-8 text-slate-400 shrink-0" />
               </div>
-            ))}
-          </div>
-        )}
+              <p className="text-lg font-medium text-slate-700 mb-1.5 tracking-tight">No projects yet</p>
+              <p className="text-[14px]">Create your first project to start uploading media.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 pb-12">
+              {projects.map((proj) => (
+                <div 
+                  key={proj.slug}
+                  onClick={() => onOpenProject(proj)}
+                  className="bg-white border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl p-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-slate-300/80 hover:-translate-y-1 cursor-pointer transition-all duration-300 ease-out group min-w-0 transform-gpu will-change-transform"
+                >
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-50/80 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:shadow-[0_4px_12px_rgba(37,99,235,0.12)] transition-transform duration-300 shrink-0 transform-gpu">
+                    <Folder className="w-6 h-6 fill-current opacity-80" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 tracking-tight truncate" title={proj.name}>{proj.name}</h3>
+                  <p className="text-[11px] text-slate-500 mt-1.5 font-mono truncate bg-slate-50 px-2 py-0.5 rounded-md inline-block border border-slate-100" title={`/projects/${proj.slug}`}>/projects/{proj.slug}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* NEW PROJECT MODAL */}
@@ -516,7 +638,7 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
                   placeholder="e.g. Law Firm Website"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50/50 shadow-inner border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2.5 bg-slate-50/50 shadow-inner border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all duration-300"
                 />
               </div>
               <div>
@@ -526,7 +648,7 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
                   required
                   value={newProjectSlug}
                   onChange={(e) => setNewProjectSlug(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 shadow-inner border border-slate-200 rounded-xl text-slate-600 font-mono text-[13px] outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-2.5 bg-slate-50 shadow-inner border border-slate-200 rounded-xl text-slate-600 font-mono text-[13px] outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all duration-300"
                 />
               </div>
               <div className="pt-5 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
@@ -540,7 +662,7 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
                 <button 
                   type="submit"
                   disabled={creating}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 disabled:opacity-70 disabled:hover:-translate-y-0 text-white font-medium rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 disabled:opacity-70 disabled:hover:-translate-y-0 text-white font-medium rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 transform-gpu"
                 >
                   {creating && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
                   Create Project
@@ -567,6 +689,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
   const [modalCopied, setModalCopied] = useState(false);
   
   const fileInputRef = useRef(null);
+  const scrollRef = useSmoothScroll(); // Apply Lenis Smooth Scroll
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -649,13 +772,6 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
     setUploadQueue(prev => prev.filter(item => item.id !== id));
   };
 
-  const getPublicUrl = (path) => {
-    if (publicConfig?.publicAssetBaseUrl) {
-      return `${publicConfig.publicAssetBaseUrl.replace(/\/$/, '')}/${path}`;
-    }
-    return `[Public_URL_Unavailable_Add_Config_To_Worker]/${path}`;
-  };
-
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
   };
@@ -666,21 +782,24 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
     setTimeout(() => setModalCopied(false), 2000);
   };
 
-  const handleDelete = async (file) => {
+  // Memoized handlers prevent grid re-renders
+  const handleSelectAsset = useCallback((file) => {
+    setSelectedAsset(file);
+  }, []);
+
+  const handleDeleteAsset = useCallback(async (file) => {
     if (!confirm(`Are you sure you want to delete ${file.name}?`)) return;
     try {
       await api('/api/delete', {
         method: 'POST',
         body: JSON.stringify({ path: file.path, sha: file.sha })
       });
-      if (selectedAsset && selectedAsset.sha === file.sha) {
-        setSelectedAsset(null);
-      }
+      setSelectedAsset(prev => prev?.sha === file.sha ? null : prev);
       fetchFiles();
     } catch (err) {
       setViewError(`Failed to delete: ${err.message}`);
     }
-  };
+  }, [api, fetchFiles]);
 
   const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
   const handleDrop = (e) => {
@@ -697,7 +816,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
       {/* HEADER */}
       <div className="border-b border-slate-200/60 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between bg-white/60 backdrop-blur-md z-10 sticky top-0 min-w-0 shadow-[0_4px_24px_rgba(0,0,0,0.01)]">
         <div className="flex items-center gap-3 md:gap-4 min-w-0 w-full">
-          <button onClick={onBack} className="p-2.5 bg-white border border-slate-200/80 shadow-sm rounded-xl text-slate-500 hover:text-slate-900 hover:shadow hover:-translate-y-0.5 active:scale-[0.98] transition-all shrink-0">
+          <button onClick={onBack} className="p-2.5 bg-white border border-slate-200/80 shadow-sm rounded-xl text-slate-500 hover:text-slate-900 hover:shadow hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 shrink-0 transform-gpu">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="min-w-0 flex-1">
@@ -709,8 +828,8 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0">
-        <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 min-w-0">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0" ref={scrollRef}>
+        <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 min-w-0 pb-12"> {/* Lenis Wrapper content element */}
           
           {viewError && (
              <div className="bg-red-50/80 border border-red-100 text-red-700 p-4 rounded-xl flex items-start gap-3 shadow-sm">
@@ -743,7 +862,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
 
             <div className="p-3 md:p-5" onDragOver={handleDragOver} onDrop={handleDrop}>
               <div 
-                className="border-2 border-dashed border-slate-300/80 rounded-2xl bg-slate-50/40 hover:bg-blue-50/30 hover:border-blue-400 transition-all duration-300 ease-out flex flex-col items-center justify-center py-10 md:py-14 px-4 md:px-6 text-center cursor-pointer group m-2 relative"
+                className="border-2 border-dashed border-slate-300/80 rounded-2xl bg-slate-50/40 hover:bg-blue-50/30 hover:border-blue-400 transition-colors duration-500 ease-out flex flex-col items-center justify-center py-10 md:py-14 px-4 md:px-6 text-center cursor-pointer group m-2 relative"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input 
@@ -753,7 +872,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                   multiple 
                   className="hidden" 
                 />
-                <div className="w-14 h-14 bg-white shadow-[0_4px_14px_rgba(0,0,0,0.05)] rounded-2xl flex items-center justify-center mb-5 group-hover:-translate-y-1 group-hover:shadow-[0_8px_24px_rgba(59,130,246,0.15)] group-hover:scale-110 transition-all duration-300 shrink-0 text-blue-500">
+                <div className="w-14 h-14 bg-white shadow-[0_4px_14px_rgba(0,0,0,0.05)] rounded-2xl flex items-center justify-center mb-5 group-hover:-translate-y-1 group-hover:shadow-[0_8px_24px_rgba(59,130,246,0.15)] group-hover:scale-110 transition-all duration-500 ease-out shrink-0 text-blue-500 transform-gpu">
                   <UploadCloud className="w-7 h-7" />
                 </div>
                 <p className="text-base font-semibold tracking-tight text-slate-700 mb-1.5">Drag and drop files here</p>
@@ -769,7 +888,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                 </div>
                 <div className="max-h-64 overflow-y-auto space-y-2 p-3 md:p-4">
                   {uploadQueue.map(item => (
-                    <div key={item.id} className="bg-white border border-slate-100 shadow-sm rounded-xl p-3 md:p-4 flex items-center justify-between hover:shadow-md hover:-translate-y-[1px] transition-all duration-200 group gap-2 md:gap-4">
+                    <div key={item.id} className="bg-white border border-slate-100 shadow-sm rounded-xl p-3 md:p-4 flex items-center justify-between hover:shadow-md hover:-translate-y-[1px] transition-all duration-300 group gap-2 md:gap-4 transform-gpu">
                       <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
                         {item.previewUrl ? (
                           <img src={item.previewUrl} alt="" className="w-10 h-10 object-cover rounded-lg border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.08)] shrink-0" />
@@ -837,79 +956,15 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                {filteredFiles.map((file) => {
-                  const url = getPublicUrl(file.path);
-                  const isImage = /\.(jpe?g|png|webp|gif|svg|avif)$/i.test(file.name);
-                  const isSvg = /\.svg$/i.test(file.name);
-                  
-                  // Optimize thumbnail: Use a fast CDN proxy to resize grid images on-the-fly to 400px WebP (skip SVGs)
-                  const thumbnailUrl = (isImage && !isSvg && publicConfig?.publicAssetBaseUrl) 
-                    ? `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&q=70&output=webp` 
-                    : url;
-                  
-                  return (
-                    <div 
-                      key={file.sha} 
-                      onClick={() => setSelectedAsset(file)}
-                      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-[0_2px_10px_-3px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_30px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1 hover:border-slate-300/80 transition-all duration-300 flex flex-col min-w-0"
-                    >
-                      <div className="h-36 bg-slate-50/80 flex items-center justify-center relative overflow-hidden border-b border-slate-100/80">
-                        {isImage && publicConfig?.publicAssetBaseUrl ? (
-                          <img
-                            src={thumbnailUrl}
-                            alt={file.name}
-                            className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.03] transition-transform duration-500 ease-out"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          <FileText className="w-10 h-10 text-slate-300" />
-                        )}
-                        
-                        {/* Hover Actions */}
-                        <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-3">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); copyToClipboard(url); }}
-                            className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
-                            title="Copy Public URL"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                          {publicConfig && (
-                            <a 
-                              href={url} 
-                              onClick={(e) => e.stopPropagation()}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
-                              title="Open in new tab"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="p-3.5 flex flex-col flex-1 min-w-0">
-                        <div className="text-[12px] font-mono font-semibold text-slate-800 truncate mb-1.5" title={file.name}>
-                          {file.name}
-                        </div>
-                        <div className="flex items-center justify-between mt-auto pt-2">
-                          <span className="text-[10px] font-medium text-slate-500 bg-slate-100/80 border border-slate-200/50 px-2 py-0.5 rounded-md truncate max-w-[60%]">
-                            {formatBytes(file.size)}
-                          </span>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDelete(file); }}
-                            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors p-1.5 -mr-1.5 rounded-lg active:scale-95"
-                            title="Delete file"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {filteredFiles.map((file) => (
+                  <MemoizedAssetCard 
+                    key={file.sha}
+                    file={file}
+                    publicConfig={publicConfig}
+                    onSelect={handleSelectAsset}
+                    onDelete={handleDeleteAsset}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -941,7 +996,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
               <div className="w-full bg-slate-50/80 rounded-2xl border border-slate-100/80 flex items-center justify-center overflow-hidden relative min-h-[160px] max-h-[40vh]">
                 {/\.(jpe?g|png|webp|gif|svg|avif)$/i.test(selectedAsset.name) && publicConfig?.publicAssetBaseUrl ? (
                   <img
-                    src={getPublicUrl(selectedAsset.path)}
+                    src={getPublicUrl(selectedAsset.path, publicConfig)}
                     alt={selectedAsset.name}
                     className="max-w-full max-h-[40vh] object-contain drop-shadow-sm p-2"
                     decoding="async"
@@ -976,7 +1031,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                 <div>
                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Public URL</div>
                   <div className="text-[12px] font-mono font-medium text-blue-600 bg-blue-50/50 border border-blue-100 px-3 py-2 rounded-xl break-all">
-                    {getPublicUrl(selectedAsset.path)}
+                    {getPublicUrl(selectedAsset.path, publicConfig)}
                   </div>
                 </div>
               </div>
@@ -985,8 +1040,8 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
             {/* Footer Actions */}
             <div className="px-5 md:px-7 py-5 border-t border-slate-100 bg-slate-50/50 shrink-0 flex flex-col-reverse sm:flex-row gap-3 sm:justify-between items-center">
               <button 
-                onClick={() => handleDelete(selectedAsset)}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-red-200 hover:bg-red-50 hover:text-red-600 rounded-xl text-slate-700 font-medium transition-all active:scale-[0.98]"
+                onClick={() => handleDeleteAsset(selectedAsset)}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-red-200 hover:bg-red-50 hover:text-red-600 rounded-xl text-slate-700 font-medium transition-all duration-300 active:scale-[0.98] transform-gpu"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete Asset
@@ -994,18 +1049,18 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                 {publicConfig && (
                   <a 
-                    href={getPublicUrl(selectedAsset.path)}
+                    href={getPublicUrl(selectedAsset.path, publicConfig)}
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 rounded-xl text-slate-700 font-medium transition-all active:scale-[0.98]"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 shadow-sm hover:shadow hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 rounded-xl text-slate-700 font-medium transition-all duration-300 active:scale-[0.98] transform-gpu"
                   >
                     <ExternalLink className="w-4 h-4" />
                     Open
                   </a>
                 )}
                 <button 
-                  onClick={() => handleModalCopy(getPublicUrl(selectedAsset.path))}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white font-medium rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all"
+                  onClick={() => handleModalCopy(getPublicUrl(selectedAsset.path, publicConfig))}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-b from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white font-medium rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.2)] hover:shadow-[0_6px_20px_rgba(15,23,42,0.2)] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 transform-gpu"
                 >
                   {modalCopied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   {modalCopied ? 'Copied!' : 'Copy URL'}
