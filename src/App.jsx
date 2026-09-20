@@ -75,28 +75,26 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
   return (
     <div 
       onClick={() => onSelect(file)}
-      // content-visibility:auto skips painting off-screen cards (Massive GPU optimization)
-      // transform-gpu pushes hover animations to hardware acceleration
-      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-[0_2px_10px_-3px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_30px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1 hover:border-slate-300/80 transition-all duration-500 ease-out flex flex-col min-w-0 transform-gpu will-change-transform [content-visibility:auto] [contain-intrinsic-size:auto_280px]"
+      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-slate-300/80 transition-all duration-300 ease-out flex flex-col min-w-0"
     >
       <div className="h-36 bg-slate-50/80 flex items-center justify-center relative overflow-hidden border-b border-slate-100/80">
         {isImage && publicConfig?.publicAssetBaseUrl ? (
           <img
             src={thumbnailUrl}
             alt={file.name}
-            className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.04] transition-transform duration-500 ease-out transform-gpu will-change-transform"
+            className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.04] transition-transform duration-300 ease-out"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <FileText className="w-10 h-10 text-slate-300 transition-transform duration-500 ease-out group-hover:scale-110" />
+          <FileText className="w-10 h-10 text-slate-300 transition-transform duration-300 ease-out group-hover:scale-110" />
         )}
         
-        {/* Hover Actions */}
-        <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out flex items-center justify-center gap-3">
+        {/* Hover Actions - Removed heavy backdrop-blurs to save paint cycles */}
+        <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out flex items-center justify-center gap-3">
           <button 
             onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(url); }}
-            className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-300 transform-gpu"
+            className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
             title="Copy Public URL"
           >
             <Copy className="w-4 h-4" />
@@ -107,7 +105,7 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
               onClick={(e) => e.stopPropagation()}
               target="_blank" 
               rel="noopener noreferrer"
-              className="p-2.5 bg-white/95 backdrop-blur-md shadow-[0_8px_16px_rgba(0,0,0,0.1)] rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-300 transform-gpu"
+              className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
               title="Open in new tab"
             >
               <ExternalLink className="w-4 h-4" />
@@ -126,7 +124,7 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
           </span>
           <button 
             onClick={(e) => { e.stopPropagation(); onDelete(file); }}
-            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-300 p-1.5 -mr-1.5 rounded-lg active:scale-95 transform-gpu"
+            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-200 p-1.5 -mr-1.5 rounded-lg active:scale-95"
             title="Delete file"
           >
             <Trash2 className="w-4 h-4" />
@@ -655,7 +653,10 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
   const [loading, setLoading] = useState(true);
   const [subfolder, setSubfolder] = useState('');
   const [uploadQueue, setUploadQueue] = useState([]);
+  
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  
   const [viewError, setViewError] = useState(null);
   
   // Asset Details Modal State
@@ -783,7 +784,18 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
     }
   };
 
-  const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Debounce the search input to prevent main thread blocking while typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Memoize the filtered files so uploading (which updates uploadQueue state frequently) doesn't re-filter the array
+  const filteredFiles = React.useMemo(() => {
+    return files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [files, searchQuery]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-transparent min-w-0 relative">
@@ -912,8 +924,8 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                 <input 
                   type="text" 
                   placeholder="Search files..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-9 pr-4 py-2 bg-white shadow-inner border border-slate-200 rounded-xl text-[13px] outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all w-full sm:w-64"
                 />
               </div>
