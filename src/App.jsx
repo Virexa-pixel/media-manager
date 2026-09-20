@@ -840,6 +840,12 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                 {filteredFiles.map((file) => {
                   const url = getPublicUrl(file.path);
                   const isImage = /\.(jpe?g|png|webp|gif|svg|avif)$/i.test(file.name);
+                  const isSvg = /\.svg$/i.test(file.name);
+                  
+                  // Optimize thumbnail: Use a fast CDN proxy to resize grid images on-the-fly to 400px WebP (skip SVGs)
+                  const thumbnailUrl = (isImage && !isSvg && publicConfig?.publicAssetBaseUrl) 
+                    ? `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&q=70&output=webp` 
+                    : url;
                   
                   return (
                     <div 
@@ -850,10 +856,11 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                       <div className="h-36 bg-slate-50/80 flex items-center justify-center relative overflow-hidden border-b border-slate-100/80">
                         {isImage && publicConfig?.publicAssetBaseUrl ? (
                           <img
-                            src={url}
+                            src={thumbnailUrl}
                             alt={file.name}
                             className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.03] transition-transform duration-500 ease-out"
                             loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           <FileText className="w-10 h-10 text-slate-300" />
@@ -937,6 +944,7 @@ function ProjectDetailView({ project, api, publicConfig, onBack }) {
                     src={getPublicUrl(selectedAsset.path)}
                     alt={selectedAsset.name}
                     className="max-w-full max-h-[40vh] object-contain drop-shadow-sm p-2"
+                    decoding="async"
                   />
                 ) : (
                   <FileText className="w-16 h-16 text-slate-300 my-10" />
