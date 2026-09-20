@@ -75,26 +75,27 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
   return (
     <div 
       onClick={() => onSelect(file)}
-      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-slate-300/80 transition-all duration-300 ease-out flex flex-col min-w-0"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '200px' }}
+      className="cursor-pointer bg-white border border-slate-200/60 rounded-2xl overflow-hidden group shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-slate-300/80 transition duration-300 ease-out flex flex-col min-w-0 transform-gpu backface-hidden"
     >
       <div className="h-36 bg-slate-50/80 flex items-center justify-center relative overflow-hidden border-b border-slate-100/80">
         {isImage && publicConfig?.publicAssetBaseUrl ? (
           <img
             src={thumbnailUrl}
             alt={file.name}
-            className="max-w-full max-h-full object-contain drop-shadow-sm group-hover:scale-[1.04] transition-transform duration-300 ease-out"
+            className="max-w-full max-h-full object-contain group-hover:scale-[1.04] transition-transform duration-300 ease-out transform-gpu backface-hidden"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <FileText className="w-10 h-10 text-slate-300 transition-transform duration-300 ease-out group-hover:scale-110" />
+          <FileText className="w-10 h-10 text-slate-300 transition-transform duration-300 ease-out group-hover:scale-110 transform-gpu backface-hidden" />
         )}
         
         {/* Hover Actions - Removed heavy backdrop-blurs to save paint cycles */}
         <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out flex items-center justify-center gap-3">
           <button 
             onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(url); }}
-            className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
+            className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-transform duration-200 transform-gpu backface-hidden"
             title="Copy Public URL"
           >
             <Copy className="w-4 h-4" />
@@ -105,7 +106,7 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
               onClick={(e) => e.stopPropagation()}
               target="_blank" 
               rel="noopener noreferrer"
-              className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-all duration-200"
+              className="p-2.5 bg-white shadow-md rounded-xl text-slate-700 hover:text-blue-600 hover:scale-110 active:scale-95 transition-transform duration-200 transform-gpu backface-hidden"
               title="Open in new tab"
             >
               <ExternalLink className="w-4 h-4" />
@@ -124,7 +125,7 @@ const MemoizedAssetCard = React.memo(({ file, publicConfig, onSelect, onDelete }
           </span>
           <button 
             onClick={(e) => { e.stopPropagation(); onDelete(file); }}
-            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-200 p-1.5 -mr-1.5 rounded-lg active:scale-95"
+            className="text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-200 p-1.5 -mr-1.5 rounded-lg active:scale-95 transform-gpu backface-hidden"
             title="Delete file"
           >
             <Trash2 className="w-4 h-4" />
@@ -577,9 +578,9 @@ function ProjectsView({ projects, loading, error, api, onOpenProject, onRefresh 
                 <div 
                   key={proj.slug}
                   onClick={() => onOpenProject(proj)}
-                  className="bg-white border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl p-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-slate-300/80 hover:-translate-y-1 cursor-pointer transition-all duration-300 ease-out group min-w-0 transform-gpu will-change-transform"
+                  className="bg-white border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl p-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-slate-300/80 hover:-translate-y-1 cursor-pointer transition duration-300 ease-out group min-w-0 transform-gpu backface-hidden"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-50/80 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:shadow-[0_4px_12px_rgba(37,99,235,0.12)] transition-transform duration-300 shrink-0 transform-gpu">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-50/80 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:shadow-[0_4px_12px_rgba(37,99,235,0.12)] transition-transform duration-300 shrink-0 transform-gpu backface-hidden">
                     <Folder className="w-6 h-6 fill-current opacity-80" />
                   </div>
                   <h3 className="font-semibold text-slate-900 tracking-tight truncate" title={proj.name}>{proj.name}</h3>
